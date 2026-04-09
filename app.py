@@ -1,6 +1,7 @@
 
 from flask import Flask
-import random
+import requests
+import pandas as pd
 import time
 
 pairs = ["EURUSD", "GBPUSD", "USDJPY"]
@@ -11,23 +12,43 @@ app = Flask(__name__)
 win = 0
 loss = 0
 
-def ai_signal():
-    pair = random.choice(pairs)
-    r = random.randint(1, 100)
+def get_candles():
+    url = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=50"
+    data = requests.get(url).json()
 
-    if r > 70:
-        signal = "BUY"
-    elif r < 30:
-        signal = "SELL"
-    else:
-        signal = "HOLD"
+    df = pd.DataFrame(data, columns=[
+        "t","o","h","l","c","v","ct","q","n","tb","tq","ig"
+    ])
 
-    return pair, signal
+    df["c"] = df["c"].astype(float)
+    df["o"] = df["o"].astype(float)
+
+    return df
+
+def generate_signal(df):
+
+    last = df.iloc[-1]
+    prev = df.iloc[-2]
+
+    # candle body
+    last_body = last["c"] - last["o"]
+    prev_body = prev["c"] - prev["o"]
+
+    # BUY condition
+    if last_body > 0 and prev_body > 0:
+        return "BUY"
+
+    # SELL condition
+    if last_body < 0 and prev_body < 0:
+        return "SELL"
+
+    return "HOLD"
 
 @app.route("/")
 def home():
 
-    pair, signal = ai_signal()
+    df = get_candles()
+    signal = generate_signal(df)
 
     color = "#22c55e" if signal == "BUY" else "#ef4444" if signal == "SELL" else "#f59e0b"
 
@@ -49,17 +70,22 @@ def home():
                 font-weight:bold;
                 color:{color};
             }}
+            .small {{
+                margin-top:20px;
+                font-size:20px;
+            }}
         </style>
     </head>
 
     <body>
-        <h1>📊 QUTOX OTC AI SYSTEM</h1>
-
-        <h2>Pair: {pair}</h2>
+        <h1>📊 QUTOX OTC CANDLE SYSTEM</h1>
 
         <div class="box">{signal}</div>
 
-        <p>Auto refresh every 5 seconds</p>
+        <div class="small">
+            Timeframe: 1 Minute Candle<br>
+            Status: LIVE
+        </div>
     </body>
     </html>
     """
